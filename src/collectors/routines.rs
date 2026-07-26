@@ -152,7 +152,7 @@ mod tests {
         assert_eq!(res.data.len(), 1);
 
         let t = &res.data[0];
-        assert_eq!(t.name, "毎日レートリミット調整");
+        assert_eq!(t.name, "仕分けループ");
         assert_eq!(t.cron_expression.as_deref(), Some("0 22 * * *"));
         assert!(t.enabled);
         assert_eq!(t.prompt(), Some("ok"));
