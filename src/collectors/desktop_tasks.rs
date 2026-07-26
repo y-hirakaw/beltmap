@@ -72,6 +72,45 @@ pub fn parse(raw: &[u8]) -> Result<ScheduledTasksFile, serde_json::Error> {
     serde_json::from_slice(raw)
 }
 
+/// 全レジストリの `scheduled-tasks.json` を探す。
+///
+/// `<support>/<root>/<account_uuid>/<install_uuid>/scheduled-tasks.json`。
+/// UUID部分はグロブ相当の総当たりで解決する(depth 2固定なので専用の
+/// globクレートは要らない)。
+pub fn find_registry_files(support_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+
+    for root in REGISTRY_ROOTS {
+        let base = support_dir.join(root);
+        let Ok(accounts) = std::fs::read_dir(&base) else {
+            continue;
+        };
+        for account in accounts.flatten() {
+            let Ok(installs) = std::fs::read_dir(account.path()) else {
+                continue;
+            };
+            for install in installs.flatten() {
+                let f = install.path().join("scheduled-tasks.json");
+                if f.is_file() {
+                    found.push(f);
+                }
+            }
+        }
+    }
+
+    found.sort();
+    found
+}
+
+/// macOSでのClaudeのサポートディレクトリ。
+pub fn default_support_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(
+        std::path::PathBuf::from(home)
+            .join("Library/Application Support/Claude"),
+    )
+}
+
 /// SKILL.md の frontmatter と本文。
 pub struct SkillDoc {
     pub name: Option<String>,

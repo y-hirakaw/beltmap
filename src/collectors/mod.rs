@@ -4,5 +4,6 @@
 //! パース処理を分け、パース側は fixture のバイト列だけで検証できるようにすること。
 
 pub mod desktop_tasks;
+pub mod labels;
 pub mod routines;
 pub mod transitions;
