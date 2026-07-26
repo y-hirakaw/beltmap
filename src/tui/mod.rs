@@ -12,6 +12,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::ir::{Ir, LaneRelevance};
+use crate::text;
 use model::{LaneMark, Row};
 
 /// 滞留の警告閾値(日)。configで上書きできるようにするのはPhase 2
@@ -133,7 +134,9 @@ fn row_to_item(row: &Row) -> ListItem<'static> {
             let mut spans = vec![
                 Span::raw(format!("{indent}")),
                 Span::styled(
-                    format!("{label:<26}"),
+                    // 長い名前で列が押し出されると地図が読めなくなる。
+                    // 全体は詳細ペインに出るので、ここは整列を優先して切る
+                    text::pad_right(&text::truncate(label, 26), 26),
                     match mark {
                         LaneMark::DeadEnd => Style::default().fg(Color::Red),
                         LaneMark::NeedsCheck => Style::default().fg(Color::Yellow),
@@ -198,9 +201,12 @@ fn row_to_item(row: &Row) -> ListItem<'static> {
             let mut spans = vec![
                 Span::raw("  "),
                 Span::styled("🔨 ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{name:<20}"), Style::default()),
                 Span::styled(
-                    format!("{trigger:<12}"),
+                    text::pad_right(&text::truncate(name, 20), 20),
+                    Style::default(),
+                ),
+                Span::styled(
+                    text::pad_right(trigger, 12),
                     Style::default().fg(Color::DarkGray),
                 ),
             ];

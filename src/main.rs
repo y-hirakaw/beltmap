@@ -7,6 +7,7 @@ mod proc;
 mod run;
 mod scan;
 mod scanlog;
+mod text;
 mod tui;
 
 use std::path::PathBuf;
@@ -91,7 +92,7 @@ fn do_scan(repo: &str) -> std::process::ExitCode {
                 Some(d) => format!("最古{d}日"),
                 None => "空".to_string(),
             };
-            println!("  {:<24} {:>3}件  {}", l.label, l.count, age);
+            println!("  {} {:>3}件  {}", text::pad_right(&l.label, 24), l.count, age);
         }
     }
     if no_evidence > 0 {
