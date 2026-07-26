@@ -1,0 +1,35 @@
+{
+  "scheduledTasks": [
+    {
+      "id": "triage",
+      "cronExpression": "0 * * * *",
+      "enabled": false,
+      "filePath": "/Users/example/Claude/Scheduled/triage/SKILL.md",
+      "createdAt": 1785059574228,
+      "userSelectedFolders": [],
+      "userSelectedFiles": [],
+      "notifySessionId": "local_00000000-0000-0000-0000-000000000001"
+    },
+    {
+      "id": "spec-writer",
+      "cronExpression": "0 * * * *",
+      "enabled": false,
+      "filePath": "/Users/example/Claude/Scheduled/spec-writer/SKILL.md",
+      "createdAt": 1785059576282,
+      "userSelectedFolders": [],
+      "userSelectedFiles": [],
+      "notifySessionId": "local_00000000-0000-0000-0000-000000000001"
+    },
+    {
+      "id": "unblocker",
+      "cronExpression": "0 * * * *",
+      "enabled": false,
+      "filePath": "/Users/example/Claude/Scheduled/unblocker/SKILL.md",
+      "createdAt": 1785059577951,
+      "userSelectedFolders": [],
+      "userSelectedFiles": [],
+      "notifySessionId": "local_00000000-0000-0000-0000-000000000001"
+    }
+  ],
+  "recordedSkips": {}
+}
