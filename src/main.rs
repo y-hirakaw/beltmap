@@ -6,6 +6,7 @@ mod proc;
 mod run;
 mod scan;
 mod scanlog;
+mod tui;
 
 use std::path::PathBuf;
 
@@ -21,13 +22,43 @@ fn main() -> std::process::ExitCode {
             };
             do_scan(repo)
         }
+        Some("map") => do_map(args.get(1).map(String::as_str)),
         _ => {
             println!("beltmap {}", env!("CARGO_PKG_VERSION"));
             println!();
             println!("  beltmap scan <owner/repo>   工場をスキャンして .beltmap/ に書き出す");
+            println!("  beltmap map [<owner/repo>]  直近のスキャン結果を地図として開く");
             std::process::ExitCode::SUCCESS
         }
     }
+}
+
+fn do_map(repo: Option<&str>) -> std::process::ExitCode {
+    let path = PathBuf::from(".beltmap/ir.json");
+
+    let raw = match std::fs::read(&path) {
+        Ok(r) => r,
+        Err(_) => {
+            eprintln!("スキャン結果がない: {}", path.display());
+            eprintln!("先に `beltmap scan <owner/repo>` を実行する");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    let ir: ir::Ir = match serde_json::from_slice(&raw) {
+        Ok(ir) => ir,
+        Err(e) => {
+            eprintln!("スキャン結果を読めない: {e}");
+            eprintln!("beltmapのバージョンが変わった可能性がある。再スキャンする");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    if let Err(e) = tui::run(ir, repo.unwrap_or("(不明)").to_string()) {
+        eprintln!("描画に失敗した: {e}");
+        return std::process::ExitCode::FAILURE;
+    }
+    std::process::ExitCode::SUCCESS
 }
 
 fn do_scan(repo: &str) -> std::process::ExitCode {
