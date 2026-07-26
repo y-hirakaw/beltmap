@@ -1,6 +1,7 @@
 mod collectors;
 mod config;
 mod enrich;
+mod ingest;
 mod ir;
 mod proc;
 mod run;

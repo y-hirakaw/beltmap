@@ -179,6 +179,8 @@ pub fn to_machine(task: &ScheduledTask, doc: Option<&SkillDoc>) -> Machine {
             MachineStatus::Planned
         },
         confidence: Confidence::Confirmed,
+        // ラベルは決定論では埋まらない。推測層が埋めるまで unknown
+        labels_confidence: Confidence::Unknown,
         provenance: vec![task.file_path.clone()],
         summary: doc.and_then(|d| d.description.clone()),
         working_dir: task.factory_hint().map(str::to_string),

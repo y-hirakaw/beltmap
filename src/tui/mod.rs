@@ -214,6 +214,27 @@ fn row_to_item(row: &Row) -> ListItem<'static> {
             ListItem::new(Line::from(spans))
         }
 
+        // 推測。実測の流れ(└─▶)と見た目を変える
+        Row::MachineLabels { reads, writes } => {
+            let mut spans = vec![Span::styled(
+                "       ┄▶ ",
+                Style::default().fg(Color::Magenta),
+            )];
+            if !reads.is_empty() {
+                spans.push(Span::styled(
+                    format!("読む {}", reads.join(", ")),
+                    Style::default().fg(Color::Magenta),
+                ));
+            }
+            if !writes.is_empty() {
+                spans.push(Span::styled(
+                    format!("   書く {}", writes.join(", ")),
+                    Style::default().fg(Color::Magenta),
+                ));
+            }
+            ListItem::new(Line::from(spans))
+        }
+
         Row::Note(t) => ListItem::new(Line::from(Span::styled(
             format!("  ({t})"),
             Style::default().fg(Color::DarkGray),

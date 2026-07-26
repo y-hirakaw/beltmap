@@ -96,6 +96,9 @@ pub struct ScanReport {
     pub transitions: usize,
     pub unknowns: Vec<String>,
     pub gaps: Vec<Gap>,
+    /// 推測層の回答のうち検証で弾いたもの。黙って捨てた記録を残す
+    #[serde(default)]
+    pub rejected: Vec<String>,
 }
 
 impl ScanReport {
@@ -112,6 +115,7 @@ impl ScanReport {
             transitions: 0,
             unknowns: Vec::new(),
             gaps: Vec::new(),
+            rejected: Vec::new(),
         }
     }
 

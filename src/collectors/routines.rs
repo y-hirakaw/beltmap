@@ -134,6 +134,8 @@ pub fn to_machine(t: &RoutineTrigger) -> Machine {
             MachineStatus::Planned
         },
         confidence: Confidence::Confirmed,
+        // ラベルは決定論では埋まらない。推測層が埋めるまで unknown
+        labels_confidence: Confidence::Unknown,
         provenance: vec![format!("cloud-routine:{}", t.id)],
         summary: None,
         working_dir: None,

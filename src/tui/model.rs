@@ -40,6 +40,11 @@ pub enum Row {
         /// 読む/書くラベルが埋まっていない
         unresolved: bool,
     },
+    /// 機械が読む/書くラベル。推測なので点線で描く
+    MachineLabels {
+        reads: Vec<String>,
+        writes: Vec<String>,
+    },
     Note(String),
 }
 
@@ -72,10 +77,11 @@ pub fn build_rows(ir: &Ir) -> Vec<Row> {
         .filter(|l| l.relevance == LaneRelevance::Factory)
         .collect();
 
-    // lane:接頭辞を外して素のラベル名で辺を持つ
+    // レーン間の流れだけを木にする。機械の辺(推測)は機械行に付ける
     let edges: Vec<(String, String, String)> = ir
         .edges
         .iter()
+        .filter(|e| e.from.starts_with("lane:") && e.to.starts_with("lane:"))
         .map(|e| {
             (
                 e.from.trim_start_matches("lane:").to_string(),
@@ -114,6 +120,12 @@ pub fn build_rows(ir: &Ir) -> Vec<Row> {
     rows.push(Row::Header(format!("機械 ({})", ir.machines.len())));
     for m in &ir.machines {
         rows.push(machine_row(m));
+        if m.labels_confidence == crate::ir::Confidence::Inferred {
+            rows.push(Row::MachineLabels {
+                reads: m.reads.clone(),
+                writes: m.writes.clone(),
+            });
+        }
     }
 
     rows
@@ -335,6 +347,7 @@ mod tests {
             writes: vec![],
             status: MachineStatus::Building,
             confidence: Confidence::Confirmed,
+            labels_confidence: Confidence::Unknown,
             provenance: vec![],
             summary: None,
             working_dir: None,

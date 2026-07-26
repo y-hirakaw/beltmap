@@ -7,14 +7,18 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::collectors::{desktop_tasks, labels, transitions};
+use crate::enrich::{self, EnrichmentRequest, EnrichmentTask};
 use crate::ir::{Ir, Machine, IR_VERSION};
 use crate::proc;
+use crate::ingest;
 use crate::scan;
 use crate::scanlog::{CollectorReport, Gap, ScanReport};
 
 pub struct Outcome {
     pub ir: Ir,
     pub report: ScanReport,
+    /// 推測層に投げる未解決タスクの件数
+    pub pending: usize,
 }
 
 pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
@@ -27,24 +31,59 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
     let mut flows = Vec::new();
     // レーン判定の根拠に使う機械の定義本文
     let mut definition_texts: Vec<String> = Vec::new();
+    // 推測層に渡す根拠。(機械id, 根拠の場所, 本文)
+    let mut sources: Vec<(String, String, String)> = Vec::new();
 
-    // --- labels ---
+    // --- gh を使うコレクター ---
+    //
+    // 実測でスキャン時間のほぼ全部が gh の待ち時間だった(labels 1012ms /
+    // transitions 846ms に対し desktop-tasks 4ms)。互いに独立なので
+    // 同時に走らせる。非同期ランタイムは要らない。待っているのは
+    // サブプロセスであって、スレッドを2本立てれば足りる
     if proc::exists("gh") {
         let t = Instant::now();
+        let (lanes_res, flows_res) = std::thread::scope(|s| {
+            let a = s.spawn(|| collect_lanes(state_repo));
+            let b = s.spawn(|| collect_flows(state_repo));
+            (a.join(), b.join())
+        });
+        let elapsed = t.elapsed().as_millis() as u64;
+
         let src = format!("gh label list -R {state_repo}");
-        match collect_lanes(state_repo) {
-            Ok(l) => {
-                report.collectors.push(CollectorReport::ok(
-                    "labels",
-                    &src,
-                    l.len(),
-                    t.elapsed().as_millis() as u64,
-                ));
+        match lanes_res {
+            Ok(Ok(l)) => {
+                report
+                    .collectors
+                    .push(CollectorReport::ok("labels", &src, l.len(), elapsed));
                 lanes = l;
             }
-            Err(e) => report
+            Ok(Err(e)) => report
                 .collectors
                 .push(CollectorReport::failed("labels", &src, &e)),
+            Err(_) => report.collectors.push(CollectorReport::failed(
+                "labels",
+                &src,
+                "収集スレッドが異常終了した",
+            )),
+        }
+
+        let src = format!("gh api repos/{state_repo}/issues/events");
+        match flows_res {
+            Ok(Ok((count, f))) => {
+                report
+                    .collectors
+                    .push(CollectorReport::ok("transitions", &src, count, elapsed));
+                report.transitions = count;
+                flows = f;
+            }
+            Ok(Err(e)) => report
+                .collectors
+                .push(CollectorReport::failed("transitions", &src, &e)),
+            Err(_) => report.collectors.push(CollectorReport::failed(
+                "transitions",
+                &src,
+                "収集スレッドが異常終了した",
+            )),
         }
     } else {
         report.collectors.push(CollectorReport::skipped(
@@ -52,27 +91,11 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
             "gh label list",
             "`gh` が見つからない。https://cli.github.com/ から導入する",
         ));
-    }
-
-    // --- transitions ---
-    if proc::exists("gh") {
-        let t = Instant::now();
-        let src = format!("gh api repos/{state_repo}/issues/events");
-        match collect_flows(state_repo) {
-            Ok((count, f)) => {
-                report.collectors.push(CollectorReport::ok(
-                    "transitions",
-                    &src,
-                    count,
-                    t.elapsed().as_millis() as u64,
-                ));
-                report.transitions = count;
-                flows = f;
-            }
-            Err(e) => report
-                .collectors
-                .push(CollectorReport::failed("transitions", &src, &e)),
-        }
+        report.collectors.push(CollectorReport::skipped(
+            "transitions",
+            "gh api issues/events",
+            "`gh` が見つからない。観測遷移が無いため辺は描けない",
+        ));
     }
 
     // --- desktop-tasks ---
@@ -101,23 +124,38 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
                         count += 1;
 
                         // 仕様がラッパー越しなら、根拠は参照先にある
+                        let machine_id = format!("desktop:{}", task.id);
                         if let Some(d) = &doc {
                             match desktop_tasks::referenced_skill_path(&d.body) {
                                 Some(referenced) => {
                                     report.gaps.push(Gap {
-                                        machine_id: format!("desktop:{}", task.id),
+                                        machine_id: machine_id.clone(),
                                         fields: vec!["reads".into(), "writes".into()],
                                         reason: format!(
                                             "登録されたSKILL.mdはラッパー。実体は {referenced}"
                                         ),
                                     });
-                                    // 参照先の本文がレーン判定の根拠になる。
+                                    // 参照先の本文がレーン判定と推測の根拠になる。
                                     // ラッパー本文にはラベルが出てこない
-                                    if let Ok(body) = std::fs::read_to_string(&referenced) {
-                                        definition_texts.push(body);
+                                    match std::fs::read_to_string(&referenced) {
+                                        Ok(body) => {
+                                            definition_texts.push(body.clone());
+                                            sources.push((machine_id, referenced, body));
+                                        }
+                                        Err(_) => {
+                                            // 参照先が読めない。ラッパー本文を
+                                            // 代わりに渡してはならない(材料が無い)
+                                        }
                                     }
                                 }
-                                None => definition_texts.push(d.body.clone()),
+                                None => {
+                                    definition_texts.push(d.body.clone());
+                                    sources.push((
+                                        machine_id,
+                                        task.file_path.clone(),
+                                        d.body.clone(),
+                                    ));
+                                }
                             }
                         }
                     }
@@ -144,9 +182,52 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
         "認証方式が未決のため未実装(計画書5.3)。クラウドルーチンは地図に出ない",
     ));
 
-    // --- 組み立て ---
-    let edges = scan::flows_to_edges(&flows);
+    // --- レーンの分類 ---
+    // 推測層への依頼に「実在するラベル一覧」を同梱するため、
+    // 依頼を作る前に済ませておく必要がある
     scan::classify_lanes(&mut lanes, &flows, &definition_texts);
+
+    // --- 推測層の回答を取り込む ---
+    // 依頼は決定論の結果から作るので、取り込みより先に組み立てる
+    let request = build_request_from(&machines, &lanes, &sources, &flows, &definition_texts);
+    let mut inferred_edges = Vec::new();
+    let enrichment_path = out_dir.join("enrichment.json");
+    if enrichment_path.is_file() {
+        let t = Instant::now();
+        let src = enrichment_path.display().to_string();
+        match std::fs::read(&enrichment_path)
+            .map_err(|e| e.to_string())
+            .and_then(|raw| serde_json::from_slice(&raw).map_err(|e| e.to_string()))
+        {
+            Ok(res) => {
+                let applied = ingest::apply(&mut machines, &request, &res);
+                inferred_edges = ingest::machine_edges(&machines);
+                report.collectors.push(CollectorReport::ok(
+                    "enrichment",
+                    &src,
+                    applied.accepted,
+                    t.elapsed().as_millis() as u64,
+                ));
+                // 弾いた回答は黙って捨てない
+                for r in applied.rejected {
+                    report.rejected.push(r);
+                }
+            }
+            Err(e) => report
+                .collectors
+                .push(CollectorReport::failed("enrichment", &src, &e)),
+        }
+    } else {
+        report.collectors.push(CollectorReport::skipped(
+            "enrichment",
+            "enrichment.json",
+            "推測の回答が無い。`beltmap-enrich` skill を実行すると点線が埋まる",
+        ));
+    }
+
+    // --- 組み立て ---
+    let mut edges = scan::flows_to_edges(&flows);
+    edges.extend(inferred_edges);
     let unknowns = scan::orphan_lanes(&lanes, &flows);
 
     // 決定論で reads/writes が埋まらなかった機械を穴として記録する
@@ -184,9 +265,59 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
         out_dir.join("ir.json"),
         serde_json::to_vec_pretty(&ir).map_err(std::io::Error::other)?,
     )?;
+
+    let request = build_request_from(&ir.machines, &ir.lanes, &sources, &flows, &definition_texts);
+    std::fs::write(
+        out_dir.join("enrichment-request.json"),
+        serde_json::to_vec_pretty(&request).map_err(std::io::Error::other)?,
+    )?;
+
     crate::scanlog::append(out_dir, &report)?;
 
-    Ok(Outcome { ir, report })
+    Ok(Outcome {
+        ir,
+        report,
+        pending: request.tasks.len(),
+    })
+}
+
+/// 埋まらなかった穴を、根拠つきのタスクとして書き出す。
+///
+/// 実在するラベル一覧を同梱するのが要点。存在しないラベルを創作されると
+/// 幻覚コンベアになるため、**候補を先に絞って渡す。**
+fn build_request_from(
+    machines: &[Machine],
+    lanes: &[crate::ir::Lane],
+    sources: &[(String, String, String)],
+    _flows: &[transitions::LaneFlow],
+    _definition_texts: &[String],
+) -> EnrichmentRequest {
+    let known_labels: Vec<String> = lanes
+        .iter()
+        .filter(|l| l.relevance == crate::ir::LaneRelevance::Factory)
+        .map(|l| l.label.clone())
+        .collect();
+
+    let tasks = machines
+        .iter()
+        .filter(|m| m.reads.is_empty() && m.writes.is_empty())
+        .filter_map(|m| {
+            // 根拠が無い機械は依頼しない。材料無しに推測させると嘘が返る
+            let (_, _, body) = sources.iter().find(|(id, _, _)| id == &m.id)?;
+            Some(EnrichmentTask {
+                machine_id: m.id.clone(),
+                source_hash: enrich::source_hash(body),
+                source_text: body.clone(),
+                fields: vec!["reads".into(), "writes".into(), "summary".into()],
+                known_labels: known_labels.clone(),
+            })
+        })
+        .collect();
+
+    EnrichmentRequest {
+        version: enrich::ENRICH_VERSION,
+        tasks,
+    }
 }
 
 fn collect_lanes(repo: &str) -> Result<Vec<crate::ir::Lane>, String> {

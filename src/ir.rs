@@ -52,6 +52,10 @@ pub enum Trigger {
     Unknown,
 }
 
+fn unknown_confidence() -> Confidence {
+    Confidence::Unknown
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
     pub id: String,
@@ -62,7 +66,14 @@ pub struct Machine {
     pub reads: Vec<String>,
     pub writes: Vec<String>,
     pub status: MachineStatus,
+    /// 機械が存在することの確信度。レジストリから読めていれば `confirmed`
     pub confidence: Confidence,
+    /// **読む/書くラベルの確信度。**機械の存在とは別に持つ。
+    ///
+    /// レジストリに機械があること(確定)と、その機械がどのラベルを扱うか(推測)は
+    /// 別の主張であり、1つの確信度で表すと必ずどちらかを誤って表示する。
+    #[serde(default = "unknown_confidence")]
+    pub labels_confidence: Confidence,
     /// この機械の判断根拠になったファイル/APIレスポンス。詳細画面で表示する
     pub provenance: Vec<String>,
     pub summary: Option<String>,
