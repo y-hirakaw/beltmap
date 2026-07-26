@@ -1,0 +1,15 @@
+{
+  "scheduledTasks": [
+    {
+      "id": "1",
+      "cronExpression": "0 9 * * *",
+      "enabled": true,
+      "filePath": "/Users/example/.claude/scheduled-tasks/1/SKILL.md",
+      "createdAt": 1784939869724,
+      "model": "claude-haiku-4-5-20251001",
+      "cwd": "/Users/example/git",
+      "useWorktree": false
+    }
+  ],
+  "recordedSkips": {}
+}

@@ -1,0 +1,76 @@
+{
+  "data": [
+    {
+      "id": "trig_EXAMPLE0000000000000001",
+      "name": "毎日レートリミット調整",
+      "enabled": true,
+      "cron_expression": "0 22 * * *",
+      "created_at": "2026-07-25T00:23:17.019088Z",
+      "updated_at": "2026-07-25T00:23:17.019088Z",
+      "next_run_at": "2026-07-25T22:03:05.701728796Z",
+      "last_fired_at": "2026-07-25T00:23:21.210390Z",
+      "created_via": "http_api",
+      "api_token_hint": "",
+      "ended_reason": "",
+      "suspension_reason": "",
+      "persist_session": false,
+      "enabled_plugins": [],
+      "extra_marketplaces": [],
+      "creator": {
+        "account_uuid": "00000000-0000-0000-0000-000000000001"
+      },
+      "job_config": {
+        "ccr": {
+          "environment_id": "env_EXAMPLE00000000000000001",
+          "events": [
+            {
+              "data": {
+                "type": "user",
+                "uuid": "00000000-0000-0000-0000-000000000002",
+                "session_id": "",
+                "parent_tool_use_id": null,
+                "message": {
+                  "role": "user",
+                  "content": "ok"
+                }
+              }
+            }
+          ],
+          "session_context": {
+            "model": "claude-sonnet-5",
+            "autofix_on_pr_create": false,
+            "allowed_tools": [
+              "Bash",
+              "Read",
+              "Write",
+              "Edit",
+              "Glob",
+              "Grep",
+              "WebFetch",
+              "WebSearch"
+            ]
+          }
+        }
+      },
+      "mcp_connections": [
+        {
+          "name": "Claude_Code_Remote",
+          "connector_uuid": "00000000-0000-0000-0000-000000000003",
+          "transport_type": "http",
+          "url": "https://api.anthropic.com/v1/code/mcp/meta",
+          "permitted_tools": [],
+          "tool_policy_overrides": [],
+          "clear_tool_policy_overrides": false
+        }
+      ],
+      "notifications": {
+        "channel": {
+          "email": false,
+          "push": true,
+          "slack": false
+        }
+      }
+    }
+  ],
+  "has_more": false
+}

@@ -1,0 +1,48 @@
+[
+  {
+    "id": 1000000001,
+    "event": "closed",
+    "created_at": "2026-05-02T10:00:00Z",
+    "actor": { "login": "example-user" },
+    "issue": { "number": 21 }
+  },
+  {
+    "id": 1000000002,
+    "event": "labeled",
+    "created_at": "2026-05-01T13:51:07Z",
+    "actor": { "login": "example-user" },
+    "label": { "name": "enhancement", "color": "a2eeef" },
+    "issue": { "number": 24 }
+  },
+  {
+    "id": 1000000003,
+    "event": "labeled",
+    "created_at": "2026-05-01T13:51:07Z",
+    "actor": { "login": "example-user" },
+    "label": { "name": "good first issue", "color": "7057ff" },
+    "issue": { "number": 24 }
+  },
+  {
+    "id": 1000000004,
+    "event": "assigned",
+    "created_at": "2026-05-01T13:50:59Z",
+    "actor": { "login": "example-user" },
+    "issue": { "number": 23 }
+  },
+  {
+    "id": 1000000005,
+    "event": "labeled",
+    "created_at": "2026-05-01T13:50:53Z",
+    "actor": { "login": "github-actions[bot]" },
+    "label": { "name": "enhancement", "color": "a2eeef" },
+    "issue": { "number": 23 }
+  },
+  {
+    "id": 1000000006,
+    "event": "unlabeled",
+    "created_at": "2026-05-01T13:50:40Z",
+    "actor": { "login": "example-user" },
+    "label": { "name": "enhancement", "color": "a2eeef" },
+    "issue": { "number": 22 }
+  }
+]
