@@ -24,6 +24,8 @@ pub enum Row {
         label: String,
         count: usize,
         oldest_days: Option<i64>,
+        /// 滞留日数が実測か代用か。同じ日数でも意味が違う
+        oldest_basis: Option<crate::ir::StagnationBasis>,
         mark: LaneMark,
         /// 木構造の深さ。流れの下流ほど深い
         depth: usize,
@@ -148,6 +150,7 @@ fn emit_lane(
         label: lane.label.clone(),
         count: lane.count,
         oldest_days: lane.oldest_days,
+        oldest_basis: lane.oldest_basis,
         mark: mark_of(&lane.label, &ir.unknowns),
         depth,
     });
@@ -192,6 +195,8 @@ mod tests {
             label: label.into(),
             count,
             oldest_days: None,
+            oldest_basis: None,
+            oldest_issue: None,
             relevance,
             evidence: Vec::new(),
         }

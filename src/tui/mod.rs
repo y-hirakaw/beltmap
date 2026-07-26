@@ -125,6 +125,7 @@ fn row_to_item(row: &Row) -> ListItem<'static> {
             label,
             count,
             oldest_days,
+            oldest_basis,
             mark,
             depth,
         } => {
@@ -154,8 +155,14 @@ fn row_to_item(row: &Row) -> ListItem<'static> {
             ];
 
             if let Some(d) = oldest_days {
+                // 代用値に ~ を付ける。実測と同じ顔で出さない
+                let approx = matches!(
+                    oldest_basis,
+                    Some(crate::ir::StagnationBasis::IssueCreated)
+                );
+                let mark = if approx { "~" } else { "" };
                 spans.push(Span::styled(
-                    format!("  最古{d}日"),
+                    format!("  最古{mark}{d}日"),
                     if stale {
                         Style::default().fg(Color::Red)
                     } else {
@@ -273,9 +280,19 @@ fn lane_detail(app: &App, label: &str) -> Vec<Line<'static>> {
         )),
         Line::from(""),
         Line::from(format!("在庫       {}件", lane.count)),
-        Line::from(match lane.oldest_days {
-            Some(d) => format!("最古滞留   {d}日"),
-            None => "最古滞留   —".to_string(),
+        Line::from(match (lane.oldest_days, lane.oldest_basis) {
+            (Some(d), Some(crate::ir::StagnationBasis::Observed)) => {
+                format!("最古滞留   {d}日 (レーンに入った時刻を観測)")
+            }
+            (Some(d), Some(crate::ir::StagnationBasis::IssueCreated)) => {
+                format!("最古滞留   ~{d}日 (issue作成日時で代用。入場の遷移が無い)")
+            }
+            (Some(d), None) => format!("最古滞留   {d}日"),
+            (None, _) => "最古滞留   —".to_string(),
+        }),
+        Line::from(match lane.oldest_issue {
+            Some(n) => format!("最古issue  #{n}"),
+            None => "最古issue  —".to_string(),
         }),
         Line::from(""),
         Line::from(Span::styled(

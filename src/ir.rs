@@ -96,6 +96,20 @@ pub enum LaneRelevance {
     NoEvidence,
 }
 
+/// 滞留日数を何から出したか。
+///
+/// 「そのレーンに入った時刻」を観測できたかどうかで、数字の意味が変わる。
+/// 同じ「5日」でも根拠の強さが違うので、区別せずに出してはならない。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StagnationBasis {
+    /// ラベルが付与された遷移を観測できた。これが本来の滞留
+    Observed,
+    /// 遷移が無く、issueの作成日時で代用した。
+    /// そのレーンでissueが作られた場合や、遷移がAPIの取得範囲より古い場合
+    IssueCreated,
+}
+
 /// レーン = ラベル1つ。コンベア上の在庫を表す。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lane {
@@ -103,6 +117,12 @@ pub struct Lane {
     pub count: usize,
     /// 最古のissueが何日滞留しているか。ベルトの詰まりの指標
     pub oldest_days: Option<i64>,
+    /// `oldest_days` を何から出したか。代用値を実測と同じ顔で出さないため
+    #[serde(default)]
+    pub oldest_basis: Option<StagnationBasis>,
+    /// 最も滞留しているissueの番号。追跡の入口になる
+    #[serde(default)]
+    pub oldest_issue: Option<u64>,
     pub relevance: LaneRelevance,
     /// なぜ工場のレーンだと判断したか。詳細画面で表示する
     #[serde(default)]

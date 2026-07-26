@@ -40,47 +40,53 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
     // transitions 846ms に対し desktop-tasks 4ms)。互いに独立なので
     // 同時に走らせる。非同期ランタイムは要らない。待っているのは
     // サブプロセスであって、スレッドを2本立てれば足りる
+    //
+    // 滞留日数の算出にラベルと遷移の両方が要るが、依存するのは*計算*だけで
+    // *取得*は互いに独立している。取得を同時に走らせ、合流してから組み立てる
     if proc::exists("gh") {
         let t = Instant::now();
-        let (lanes_res, flows_res) = std::thread::scope(|s| {
-            let a = s.spawn(|| collect_lanes(state_repo));
-            let b = s.spawn(|| collect_flows(state_repo));
+        let (label_res, flow_res) = std::thread::scope(|s| {
+            let a = s.spawn(|| fetch_label_data(state_repo));
+            let b = s.spawn(|| fetch_transitions(state_repo));
             (a.join(), b.join())
         });
         let elapsed = t.elapsed().as_millis() as u64;
 
-        let src = format!("gh label list -R {state_repo}");
-        match lanes_res {
-            Ok(Ok(l)) => {
-                report
-                    .collectors
-                    .push(CollectorReport::ok("labels", &src, l.len(), elapsed));
-                lanes = l;
-            }
-            Ok(Err(e)) => report
-                .collectors
-                .push(CollectorReport::failed("labels", &src, &e)),
-            Err(_) => report.collectors.push(CollectorReport::failed(
-                "labels",
-                &src,
-                "収集スレッドが異常終了した",
-            )),
-        }
-
         let src = format!("gh api repos/{state_repo}/issues/events");
-        match flows_res {
-            Ok(Ok((count, f))) => {
+        let mut observed: Vec<transitions::LabelTransition> = Vec::new();
+        match flow_res {
+            Ok(Ok(t)) => {
                 report
                     .collectors
-                    .push(CollectorReport::ok("transitions", &src, count, elapsed));
-                report.transitions = count;
-                flows = f;
+                    .push(CollectorReport::ok("transitions", &src, t.len(), elapsed));
+                report.transitions = t.len();
+                // 付与と剥奪が別秒に記録されることがあるため窓は広めに取る
+                flows = transitions::lane_flows(&t, 60);
+                observed = t;
             }
             Ok(Err(e)) => report
                 .collectors
                 .push(CollectorReport::failed("transitions", &src, &e)),
             Err(_) => report.collectors.push(CollectorReport::failed(
                 "transitions",
+                &src,
+                "収集スレッドが異常終了した",
+            )),
+        }
+
+        let src = format!("gh label list -R {state_repo}");
+        match label_res {
+            Ok(Ok((labs, issues))) => {
+                lanes = labels::build_lanes(&labs, &issues, &observed, chrono::Utc::now());
+                report
+                    .collectors
+                    .push(CollectorReport::ok("labels", &src, lanes.len(), elapsed));
+            }
+            Ok(Err(e)) => report
+                .collectors
+                .push(CollectorReport::failed("labels", &src, &e)),
+            Err(_) => report.collectors.push(CollectorReport::failed(
+                "labels",
                 &src,
                 "収集スレッドが異常終了した",
             )),
@@ -368,13 +374,13 @@ fn build_request_from(
     }
 }
 
-fn collect_lanes(repo: &str) -> Result<Vec<crate::ir::Lane>, String> {
+fn fetch_label_data(repo: &str) -> Result<(Vec<labels::GhLabel>, Vec<labels::GhIssue>), String> {
     let raw = proc::run(
         "gh",
         &["label", "list", "-R", repo, "--limit", "200", "--json", "name,description"],
     )
     .map_err(|e| e.to_string())?;
-    let labels = labels::parse_labels(&raw).map_err(|e| e.to_string())?;
+    let labs = labels::parse_labels(&raw).map_err(|e| e.to_string())?;
 
     let raw = proc::run(
         "gh",
@@ -386,10 +392,10 @@ fn collect_lanes(repo: &str) -> Result<Vec<crate::ir::Lane>, String> {
     .map_err(|e| e.to_string())?;
     let issues = labels::parse_issues(&raw).map_err(|e| e.to_string())?;
 
-    Ok(labels::build_lanes(&labels, &issues, chrono::Utc::now()))
+    Ok((labs, issues))
 }
 
-fn collect_flows(repo: &str) -> Result<(usize, Vec<transitions::LaneFlow>), String> {
+fn fetch_transitions(repo: &str) -> Result<Vec<transitions::LabelTransition>, String> {
     let raw = proc::run(
         "gh",
         &[
@@ -401,8 +407,5 @@ fn collect_flows(repo: &str) -> Result<(usize, Vec<transitions::LaneFlow>), Stri
     .map_err(|e| e.to_string())?;
 
     let events = transitions::parse(&raw).map_err(|e| e.to_string())?;
-    let t = transitions::label_transitions(&events);
-    // 付与と剥奪が別秒に記録されることがあるため窓は広めに取る
-    let flows = transitions::lane_flows(&t, 60);
-    Ok((t.len(), flows))
+    Ok(transitions::label_transitions(&events))
 }

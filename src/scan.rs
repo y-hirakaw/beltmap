@@ -132,6 +132,8 @@ mod tests {
             label: label.into(),
             count,
             oldest_days: None,
+            oldest_basis: None,
+            oldest_issue: None,
             relevance: LaneRelevance::Factory,
             evidence: Vec::new(),
         }
