@@ -25,6 +25,8 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
     let mut machines: Vec<Machine> = Vec::new();
     let mut lanes = Vec::new();
     let mut flows = Vec::new();
+    // レーン判定の根拠に使う機械の定義本文
+    let mut definition_texts: Vec<String> = Vec::new();
 
     // --- labels ---
     if proc::exists("gh") {
@@ -99,17 +101,24 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
                         count += 1;
 
                         // 仕様がラッパー越しなら、根拠は参照先にある
-                        if let Some(d) = &doc
-                            && let Some(referenced) =
-                                desktop_tasks::referenced_skill_path(&d.body)
-                        {
-                            report.gaps.push(Gap {
-                                machine_id: format!("desktop:{}", task.id),
-                                fields: vec!["reads".into(), "writes".into()],
-                                reason: format!(
-                                    "登録されたSKILL.mdはラッパー。実体は {referenced}"
-                                ),
-                            });
+                        if let Some(d) = &doc {
+                            match desktop_tasks::referenced_skill_path(&d.body) {
+                                Some(referenced) => {
+                                    report.gaps.push(Gap {
+                                        machine_id: format!("desktop:{}", task.id),
+                                        fields: vec!["reads".into(), "writes".into()],
+                                        reason: format!(
+                                            "登録されたSKILL.mdはラッパー。実体は {referenced}"
+                                        ),
+                                    });
+                                    // 参照先の本文がレーン判定の根拠になる。
+                                    // ラッパー本文にはラベルが出てこない
+                                    if let Ok(body) = std::fs::read_to_string(&referenced) {
+                                        definition_texts.push(body);
+                                    }
+                                }
+                                None => definition_texts.push(d.body.clone()),
+                            }
                         }
                     }
                 }
@@ -137,6 +146,7 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
 
     // --- 組み立て ---
     let edges = scan::flows_to_edges(&flows);
+    scan::classify_lanes(&mut lanes, &flows, &definition_texts);
     let unknowns = scan::orphan_lanes(&lanes, &flows);
 
     // 決定論で reads/writes が埋まらなかった機械を穴として記録する

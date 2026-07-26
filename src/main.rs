@@ -43,6 +43,49 @@ fn do_scan(repo: &str) -> std::process::ExitCode {
 
     println!("{}", outcome.report.summary_line());
 
+    let factory: Vec<_> = outcome
+        .ir
+        .lanes
+        .iter()
+        .filter(|l| l.relevance == ir::LaneRelevance::Factory)
+        .collect();
+    let no_evidence = outcome.ir.lanes.len() - factory.len();
+
+    if !factory.is_empty() {
+        println!();
+        println!("レーン:");
+        for l in &factory {
+            let age = match l.oldest_days {
+                Some(d) => format!("最古{d}日"),
+                None => "空".to_string(),
+            };
+            println!("  {:<24} {:>3}件  {}", l.label, l.count, age);
+        }
+    }
+    if no_evidence > 0 {
+        // 畳んだことを黙らない。件数は常に出す
+        println!("  (工場のレーンだという証拠が無いラベル {no_evidence}件は省略)");
+    }
+
+    if !outcome.ir.unknowns.is_empty() {
+        println!();
+        println!("未解決:");
+        for u in &outcome.ir.unknowns {
+            match u {
+                ir::Unknown::OrphanLane { label, note } => {
+                    println!("  行き止まり  {label} … {note}")
+                }
+                ir::Unknown::UnobservedLane { label, note } => {
+                    println!("  要確認      {label} … {note}")
+                }
+                ir::Unknown::MachineNotOnThisHost { machine_id, note } => {
+                    println!("  別マシン?   {machine_id} … {note}")
+                }
+                ir::Unknown::Other { note } => println!("  {note}"),
+            }
+        }
+    }
+
     // 取れなかったものを黙らせない(計画書5.3)
     let problems = outcome.report.problems();
     if !problems.is_empty() {

@@ -70,6 +70,21 @@ pub struct Machine {
     pub working_dir: Option<String>,
 }
 
+/// そのラベルが工場のレーンだという証拠があるか。
+///
+/// 実リポジトリには工場と無関係なラベル(GitHubの標準ラベル等)が必ず混ざる。
+/// ただし**証拠が無いことは無関係であることを意味しない。**断定すると推測に
+/// なるため、あくまで「証拠の有無」として持つ。描画時に既定で畳むのは
+/// `NoEvidence` 側だが、件数は常に見せること。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LaneRelevance {
+    /// 遷移が観測された、または機械の定義に名前が出てくる
+    Factory,
+    /// どちらの証拠も無い
+    NoEvidence,
+}
+
 /// レーン = ラベル1つ。コンベア上の在庫を表す。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lane {
@@ -77,6 +92,10 @@ pub struct Lane {
     pub count: usize,
     /// 最古のissueが何日滞留しているか。ベルトの詰まりの指標
     pub oldest_days: Option<i64>,
+    pub relevance: LaneRelevance,
+    /// なぜ工場のレーンだと判断したか。詳細画面で表示する
+    #[serde(default)]
+    pub evidence: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,8 +110,14 @@ pub struct Edge {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Unknown {
-    /// 消費する機械が見つからないラベル
+    /// 流入が観測されているのに流出が無いレーン。行き止まりの強い証拠
     OrphanLane { label: String, note: String },
+    /// 在庫はあるが流入も流出も観測されていないレーン。
+    ///
+    /// issueがそのレーンで生まれた場合、行き止まりでも流入は記録されない。
+    /// 行き止まりかもしれないし、単に動きが古いだけかもしれない。
+    /// **OrphanLaneと同じ扱いにしてはならない**(証拠の強さが違う)
+    UnobservedLane { label: String, note: String },
     /// クラウド側にはあるが、対応するローカル機械がこのマシンに無い。
     /// 別マシンに機械がある強い証拠になる(5.3)
     MachineNotOnThisHost { machine_id: String, note: String },

@@ -50,6 +50,9 @@ pub fn build_lanes(labels: &[GhLabel], issues: &[GhIssue], now: DateTime<Utc>) -
             label: l.name.clone(),
             count: 0,
             oldest_days: None,
+            // 分類は scan::classify_lanes が根拠つきで行う
+            relevance: crate::ir::LaneRelevance::NoEvidence,
+            evidence: Vec::new(),
         })
         .collect();
 
