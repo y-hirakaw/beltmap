@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use crate::collectors::{desktop_tasks, labels, transitions};
+use crate::collectors::{desktop_tasks, labels, routines, transitions};
 use crate::enrich::{self, EnrichmentRequest, EnrichmentTask};
 use crate::ir::{Ir, Machine, IR_VERSION};
 use crate::proc;
@@ -175,12 +175,60 @@ pub fn scan_all(state_repo: &str, out_dir: &Path) -> std::io::Result<Outcome> {
         }
     }
 
-    // --- routines (未実装) ---
-    report.collectors.push(CollectorReport::skipped(
-        "routines",
-        "GET /v1/code/triggers",
-        "認証方式が未決のため未実装(計画書5.3)。クラウドルーチンは地図に出ない",
-    ));
+    // --- routines ---
+    //
+    // beltmapは認証情報を持たない。取得は beltmap-routines skill が代行し、
+    // ここではその置いたファイルを読むだけ。skillは判断をしないため、
+    // 中身はAPIの応答そのものであり実測として扱ってよい(計画書5.3)
+    {
+        let t = Instant::now();
+        let path = out_dir.join("routines.json");
+        if path.is_file() {
+            let src = path.display().to_string();
+            match std::fs::read(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|raw| routines::parse_file(&raw).map_err(|e| e.to_string()))
+            {
+                Ok(f) => {
+                    let age = (chrono::Utc::now() - f.fetched_at).num_days();
+                    for t in &f.response.data {
+                        machines.push(routines::to_machine(t));
+                        // ルーチンのプロンプトも機械の仕様書であり推測の材料になる
+                        if let Some(p) = t.prompt() {
+                            definition_texts.push(p.to_string());
+                            sources.push((
+                                t.id.clone(),
+                                format!("cloud-routine:{}", t.id),
+                                p.to_string(),
+                            ));
+                        }
+                    }
+                    let mut rep = CollectorReport::ok(
+                        "routines",
+                        &src,
+                        f.response.data.len(),
+                        t.elapsed().as_millis() as u64,
+                    );
+                    // 取得はユーザー起動なので古くなりうる。黙らない
+                    if age >= 1 {
+                        rep.note = Some(format!(
+                            "{age}日前に取得した情報。beltmap-routines skill で更新できる"
+                        ));
+                    }
+                    report.collectors.push(rep);
+                }
+                Err(e) => report
+                    .collectors
+                    .push(CollectorReport::failed("routines", &src, &e)),
+            }
+        } else {
+            report.collectors.push(CollectorReport::skipped(
+                "routines",
+                "routines.json",
+                "未取得。`beltmap-routines` skill を実行するとクラウドルーチンが地図に出る",
+            ));
+        }
+    }
 
     // --- レーンの分類 ---
     // 推測層への依頼に「実在するラベル一覧」を同梱するため、

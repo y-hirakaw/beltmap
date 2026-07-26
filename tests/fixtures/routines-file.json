@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fetched_at": "2026-07-26T03:00:00Z",
+  "response": {
+    "data": [
+      {
+        "id": "trig_EXAMPLE0000000000000001",
+        "name": "仕分けループ",
+        "enabled": true,
+        "cron_expression": "0 22 * * *",
+        "next_run_at": "2026-07-26T22:03:05.701728796Z",
+        "last_fired_at": "2026-07-26T00:23:21.210390Z",
+        "job_config": {
+          "ccr": {
+            "environment_id": "env_EXAMPLE00000000000000001",
+            "events": [
+              {
+                "data": {
+                  "type": "user",
+                  "message": {
+                    "role": "user",
+                    "content": "ai-process:ready のissueを仕分けて ai-process:spec-draft に送る"
+                  }
+                }
+              }
+            ],
+            "session_context": {
+              "model": "claude-sonnet-5",
+              "allowed_tools": ["Bash", "Read"]
+            }
+          }
+        },
+        "mcp_connections": [{ "name": "Claude_Code_Remote" }]
+      }
+    ],
+    "has_more": false
+  }
+}

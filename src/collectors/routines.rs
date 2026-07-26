@@ -103,6 +103,26 @@ pub fn parse(raw: &[u8]) -> Result<TriggersResponse, serde_json::Error> {
     serde_json::from_slice(raw)
 }
 
+/// `beltmap-routines` skill が置くファイル。
+///
+/// beltmapは認証情報を持たないため、取得だけをユーザーのセッションに代行させる。
+/// **中身はAPIの応答そのままであり、skillは判断をしない。**したがってこれは
+/// 推測ではなく実測であり、confidenceは`confirmed`でよい。
+///
+/// ただし取得はユーザー起動なので古くなりうる。`fetched_at` を必ず持たせて
+/// 情報の古さを表示できるようにする。
+#[derive(Debug, Deserialize)]
+pub struct RoutinesFile {
+    #[serde(default)]
+    pub version: u32,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+    pub response: TriggersResponse,
+}
+
+pub fn parse_file(raw: &[u8]) -> Result<RoutinesFile, serde_json::Error> {
+    serde_json::from_slice(raw)
+}
+
 /// ルーチン定義を機械に変換する。
 ///
 /// `reads` / `writes` はここでは埋めない。プロンプト本文からラベルを読み取るのは
@@ -160,6 +180,32 @@ mod tests {
         assert_eq!(t.prompt(), Some("ok"));
         assert_eq!(t.model(), Some("claude-sonnet-5"));
         assert_eq!(t.mcp_connections[0].name, "Claude_Code_Remote");
+    }
+
+    const FILE: &[u8] = include_bytes!("../../tests/fixtures/routines-file.json");
+
+    #[test]
+    fn parses_the_skill_written_file() {
+        let f = parse_file(FILE).expect("skillが置く形も読めること");
+        assert_eq!(f.response.data.len(), 1);
+        assert_eq!(f.response.data[0].name, "仕分けループ");
+        // 取得時刻が無いと情報の古さを表示できない
+        assert_eq!(f.fetched_at.to_rfc3339(), "2026-07-26T03:00:00+00:00");
+    }
+
+    #[test]
+    fn file_without_fetched_at_is_rejected() {
+        // 古さを表示できないファイルを黙って受け入れない
+        let raw = br#"{"version":1,"response":{"data":[],"has_more":false}}"#;
+        assert!(parse_file(raw).is_err());
+    }
+
+    #[test]
+    fn cloud_routine_prompt_is_available_as_enrichment_source() {
+        // クラウドルーチンのプロンプトも機械の仕様書であり、推測層の材料になる
+        let f = parse_file(FILE).unwrap();
+        let p = f.response.data[0].prompt().expect("プロンプトが取れること");
+        assert!(p.contains("ai-process:ready"));
     }
 
     #[test]
